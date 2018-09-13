@@ -3,17 +3,17 @@ package xyz.mrcroxx.hgserver
 import org.apache.commons.codec.digest.DigestUtils
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
+import org.springframework.stereotype.Controller
+import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.*
-import java.io.Serializable
-import java.util.concurrent.TimeUnit
+import org.springframework.web.client.RestTemplate
+import java.nio.file.Files
+import java.nio.file.Paths
 
 
 @RestController
-class WXcontroller(@Autowired val wxService: WXService,
-                   @Autowired val stringRedisTemplate: StringRedisTemplate) {
+class WXcontroller(@Autowired val wxService: WXService) {
 
     val logger = LoggerFactory.getLogger(WXcontroller::class.java)!!
 
@@ -34,7 +34,8 @@ class WXcontroller(@Autowired val wxService: WXService,
 
     @PostMapping(value = "/wx", consumes = [MediaType.TEXT_XML_VALUE], produces = [MediaType.TEXT_XML_VALUE])
     fun wxPost(@RequestBody wxMessage: WXMessage): WXMessage {
-        logger.debug(wxMessage.toString())
+        logger.info(wxMessage.toString())
         return wxService.handle(wxMessage)
     }
+
 }

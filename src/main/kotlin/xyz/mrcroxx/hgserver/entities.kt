@@ -8,9 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Configuration
 import java.io.Serializable
 import java.util.*
-import javax.persistence.Column
-import javax.persistence.Entity
-import javax.persistence.Id
+import javax.persistence.*
 
 @Entity
 data class A1(
@@ -31,11 +29,41 @@ data class A1(
         var description: String?,
         @Column(length = 128)
         var contact: String?,
+        @Column
+        var matched: Int,
         @Column(length = 128)
         var cpopenid: String?
 ) : Serializable {
+
+    companion object {
+        const val MATCH_UNKNOWN = 0
+        const val MATCH_MATCHED = 1
+        const val MATCH_MISS = -1
+    }
+
     fun toJson(): String = Gson().toJson(this)
 }
+
+@Entity
+data class A2(
+        @Id
+        @Column(length = 128)
+        val openid: String,
+        @Column
+        var task1: Boolean,
+        @Column
+        var task2: Boolean,
+        @Column
+        var task3: Boolean,
+        @Column
+        var task4: Boolean,
+        @Column
+        var task5: Boolean,
+        @Column
+        var task6: Boolean,
+        @Column
+        var task7: Boolean
+)
 
 @JacksonXmlRootElement(localName = "xml")
 data class WXMessage(
@@ -49,13 +77,24 @@ data class WXMessage(
         val msgType: String? = null,
         @JacksonXmlProperty(localName = "Content")
         val content: String? = null,
+        @JacksonXmlProperty(localName = "PicUrl")
+        val picUrl: String? = null,
         @JacksonXmlProperty(localName = "MsgId")
         val msgId: Long? = null,
+        @JacksonXmlProperty(localName = "MediaId")
+        val mediaId: String? = null,
+        @JacksonXmlProperty(localName = "Image")
+        val image: WXMessageImage? = null,
         @JacksonXmlProperty(localName = "Event")
         val event: String? = null
 ) : Serializable {
     fun toJson(): String = Gson().toJson(this)
 }
+
+data class WXMessageImage(
+        @JacksonXmlProperty(localName = "MediaId")
+        val mediaId: String? = null
+) : Serializable
 
 fun String.toWXMessage(): WXMessage = Gson().fromJson(this, WXMessage::class.java)
 fun String.toA1(): A1 = Gson().fromJson(this, A1::class.java)

@@ -9,3 +9,5 @@ fun <T, S> JpaRepository<T, S>.findOne(id: S): T? {
 }
 
 interface A1Repository : JpaRepository<A1, String>
+
+interface A2Repository : JpaRepository<A2, String>

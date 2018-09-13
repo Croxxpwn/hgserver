@@ -3,12 +3,15 @@ package xyz.mrcroxx.hgserver
 
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.io.ResourceLoader
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
+import org.springframework.web.client.RestTemplate
 import xyz.mrcroxx.hgserver.WXService.Companion.STATUS_DEFAULT
-import java.util.*
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
-import kotlin.math.exp
 
 
 interface Act {
@@ -16,8 +19,8 @@ interface Act {
     val actName: String
     val entry: List<String>
     val description: String
-    val timeStart: Date
-    val timeEnd: Date
+    val timeStart: LocalDateTime
+    val timeEnd: LocalDateTime
     fun hasStatus(value: String): Boolean
     fun handle(wxMessage: WXMessage, statusValue: String): WXMessage
 }
@@ -28,11 +31,13 @@ interface Act {
 @Service
 class WXService(@Autowired val redisService: RedisService,
                 @Autowired val emojiFactory: EmojiFactory,
-                @Autowired val act1CP: Act1CP) {
+                @Autowired val act1CP: Act1CP,
+                @Autowired val act2CPMission: Act2CPMission) {
 
     companion object {
         const val TYPE_TEXT = "text"
         const val TYPE_EVENT = "event"
+        const val TYPE_IMAGE = "image"
         const val EVENT_SUBSCRIBE = "subscribe"
 
         const val STATUS_DEFAULT = "STATUS_DEFAULT"
@@ -49,9 +54,9 @@ class WXService(@Autowired val redisService: RedisService,
     @Value("\${msg.subscribe}")
     val subscribe: String? = null
 
-    val acts: List<Act> = listOf(act1CP)
 
-
+    // TODO:Register Acts
+    val acts: List<Act> = listOf(act1CP, act2CPMission)
 
 
     /**
@@ -66,16 +71,22 @@ class WXService(@Autowired val redisService: RedisService,
         if (wxMessage.msgType == TYPE_EVENT) return handleEvent(wxMessage)
         // 获取用户Status缓存
         val status = redisService.getStatus(wxMessage.fromUserName!!)
-        val date = Date()
+        val date = LocalDateTime.now()
         // 检查Status是否在某活动中
         acts.forEach {
-            if (date.after(it.timeStart) && date.before(it.timeEnd) && it.hasStatus(status)) return it.handle(wxMessage, status)
+            if (date > it.timeStart && date < it.timeEnd && it.hasStatus(status)) return it.handle(wxMessage, status)
         }
         // 初始化用户Status
         redisService.setStatus(wxMessage.fromUserName, STATUS_DEFAULT)
         // 检查是否为入口消息
         acts.forEach {
-            if (date.after(it.timeStart) && date.before(it.timeEnd) && wxMessage.msgType == TYPE_TEXT && wxMessage.content in it.entry) return it.handle(wxMessage, status)
+            if (wxMessage.msgType == TYPE_TEXT && wxMessage.content in it.entry)
+                if (date < it.timeStart)
+                    return echoBefore(wxMessage)
+                else if (date > it.timeEnd)
+                    return echoAfter(wxMessage)
+                else
+                    return it.handle(wxMessage, status)
         }
         return echoEmoji(wxMessage)
     }
@@ -121,6 +132,22 @@ class WXService(@Autowired val redisService: RedisService,
                 msgType = TYPE_TEXT, content = emojiFactory.createEmoji())
     }
 
+    fun echoBefore(wxMessage: WXMessage): WXMessage {
+        return return WXMessage(toUsername = wxMessage.fromUserName, fromUserName = wxMessage.toUsername, createTime = emojiFactory.getTimestamp(),
+                msgType = TYPE_TEXT, content = """
+                    |这项活动还未开始，请耐心等待呦~
+                    |
+                    |(｡･ω･｡)ﾉ♡""".trimMargin())
+    }
+
+    fun echoAfter(wxMessage: WXMessage): WXMessage {
+        return return WXMessage(toUsername = wxMessage.fromUserName, fromUserName = wxMessage.toUsername, createTime = emojiFactory.getTimestamp(),
+                msgType = TYPE_TEXT, content = """
+                    |这项活动已经结束，航概君会推出更多好玩的活动呦，敬请期待~
+                    |
+                    |∠( ᐛ 」∠)＿""".trimMargin())
+    }
+
 
 }
 
@@ -153,4 +180,21 @@ class RedisService(@Autowired val stringRedisTemplate: StringRedisTemplate) {
 
     fun getActData(actName: String, openid: String): String? = stringRedisTemplate.opsForValue().get("$actName::$openid")
 
+}
+
+@Service
+class FileService(@Autowired val restTemplate: RestTemplate,
+                  @Autowired val resourceLoader: ResourceLoader) {
+
+    @Value("\${wx.upload-dir}")
+    val uploaddir: String? = null
+
+    fun saveImageFromUrl(url: String, dirpath: String, name: String, type: String = ".jpg"): Boolean {
+        val imageBytes: ByteArray = restTemplate.getForObject(url, ByteArray::class.java) ?: return false
+        val path = Paths.get(uploaddir, dirpath)
+        if (Files.notExists(path))
+            Files.createDirectories(path)
+        Files.write(Paths.get(path.toString(), "$name$type"), imageBytes)
+        return true
+    }
 }
